@@ -14,7 +14,7 @@
           hx-swap="innerHTML"
         >{{ shift.clamp.code }}</button>
         <time datetime="{{ shift.started_at.isoformat() }}">
-          {{ shift.started_at.strftime('%Y-%m-%d %H:%M') }}
+          {{ format_local(shift.started_at) }}
         </time>
       </header>
       <div class="timeline-card-body">

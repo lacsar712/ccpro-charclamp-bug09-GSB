@@ -437,6 +437,28 @@ input, select, textarea {
   margin-top: 8px;
 }
 
+.drawer-clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f0d0b;
+}
+
+.drawer-clock-label { color: var(--muted); font-size: 0.85rem; }
+
+.drawer-clock strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  color: #ffedd5;
+  letter-spacing: 0.04em;
+}
+
+.btn.btn-tiny { padding: 4px 10px; font-size: 0.82rem; font-weight: 600; }
+
 .login-body {
   min-height: 100vh;
   display: grid;

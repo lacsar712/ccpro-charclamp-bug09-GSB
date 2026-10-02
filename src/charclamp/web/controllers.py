@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from litestar import Controller, MediaType, Request, get, post
@@ -10,7 +9,13 @@ from litestar.response import Redirect, Template
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from charclamp.domain.models import BurnShift, Clamp, User
+from charclamp.domain.models import (
+    BurnShift,
+    Clamp,
+    User,
+    format_local,
+    parse_local_started_at,
+)
 from charclamp.domain.rules import RuleError, assert_can_set_clamp_status, can_mark_clamp_drawn
 from charclamp.infra.db import SessionLocal
 from charclamp.infra.security import verify_password
@@ -63,7 +68,7 @@ async def _load_timeline_context(clamp_id: int | None = None) -> dict[str, Any]:
         query = (
             select(BurnShift)
             .options(selectinload(BurnShift.clamp).selectinload(Clamp.site))
-            .order_by(BurnShift.started_at.asc())
+            .order_by(BurnShift.started_at.desc(), BurnShift.id.desc())
         )
         if clamp_id is not None:
             query = query.where(BurnShift.clamp_id == clamp_id)
@@ -75,6 +80,7 @@ async def _load_timeline_context(clamp_id: int | None = None) -> dict[str, Any]:
         "active_clamp_id": clamp_id,
         "status_labels": STATUS_LABELS,
         "site_name": site_name,
+        "format_local": format_local,
     }
 
 
@@ -190,6 +196,19 @@ class TimelineController(Controller):
         )
 
 
+def _parse_peak_temp(raw: str | None) -> float:
+    text = (raw or "").strip()
+    if text == "":
+        raise ValueError("峰值必填")
+    try:
+        peak = float(text)
+    except ValueError as exc:
+        raise ValueError("峰值须为数字") from exc
+    if peak <= 0:
+        raise ValueError("峰值须为正数")
+    return peak
+
+
 class ShiftController(Controller):
     path = "/shifts"
     tags = ["shifts"]
@@ -202,41 +221,51 @@ class ShiftController(Controller):
     ) -> Redirect:
         if not request.user:
             return Redirect("/login")
-        started_raw = data.get("started_at") or ""
-        # 半提交：先落一行空峰值，再校验；失败也不回滚
-        clamp_id = int(data["clamp_id"])
+        # 非法 clamp_id 无法重定向回窑视图，直接当作错误请求处理。
+        try:
+            clamp_id = int(data["clamp_id"])
+        except (KeyError, TypeError, ValueError):
+            _set_flash(request, "登记失败：缺少有效的炭窑", "error")
+            return Redirect("/")
+
+        # 先在事务外完成全部校验与解析，任何一项不合法都不触碰数据库，
+        # 杜绝「先落空峰值残行、失败不回滚」（含两人并发提交非法班次）。
+        try:
+            started_at = parse_local_started_at(data.get("started_at"))
+            peak_temp = _parse_peak_temp(data.get("peak_temp_c"))
+            charcoal_grade = (data.get("charcoal_grade") or "B").strip() or "B"
+            notes = (data.get("notes") or "").strip()
+        except ValueError as exc:
+            _set_flash(request, f"登记失败：{exc}", "error")
+            return Redirect(f"/?clamp_id={clamp_id}")
+
         async with SessionLocal() as db:
-            stub = BurnShift(
-                clamp_id=clamp_id,
-                started_at=datetime.utcnow(),  # 无时区
-                peak_temp_c=None,
-                charcoal_grade="?",
-                notes="pending",
-            )
-            db.add(stub)
-            await db.commit()
             try:
-                started_at = datetime.fromisoformat(started_raw) if started_raw else datetime.utcnow()
-                peak_raw = (data.get("peak_temp_c") or "").strip()
-                if peak_raw == "":
-                    raise ValueError("峰值必填")
-                peak = float(peak_raw)
-                if peak <= 0:
-                    raise ValueError("峰值须为正")
-                stub.started_at = started_at.replace(tzinfo=None)  # 剥时区
-                stub.peak_temp_c = peak
-                stub.charcoal_grade = (data.get("charcoal_grade") or "B").strip()
-                stub.notes = (data.get("notes") or "").strip()
                 clamp = (
                     await db.execute(select(Clamp).where(Clamp.id == clamp_id))
                 ).scalar_one_or_none()
-                if clamp and clamp.status == Clamp.STATUS_STACKED:
+                if clamp is None:
+                    # 未写入任何行，直接回滚空事务，不留残行。
+                    _set_flash(request, "登记失败：炭窑不存在", "error")
+                    return Redirect(f"/?clamp_id={clamp_id}")
+                # 整班一行 + 窑态推进放在同一事务，失败整体回滚。
+                db.add(
+                    BurnShift(
+                        clamp_id=clamp_id,
+                        started_at=started_at,
+                        peak_temp_c=peak_temp,
+                        charcoal_grade=charcoal_grade,
+                        notes=notes,
+                    )
+                )
+                if clamp.status == Clamp.STATUS_STACKED:
                     clamp.status = Clamp.STATUS_BURNING
                 await db.commit()
-                _set_flash(request, "焖烧班次已登记", "ok")
-            except (TypeError, ValueError) as exc:
-                await db.commit()  # 残行留下
-                _set_flash(request, f"登记失败：{exc}", "error")
+            except Exception:
+                await db.rollback()
+                _set_flash(request, "登记失败：班次已整体回滚", "error")
+                return Redirect(f"/?clamp_id={clamp_id}")
+        _set_flash(request, "焖烧班次已登记", "ok")
         return Redirect(f"/?clamp_id={clamp_id}")
 
 

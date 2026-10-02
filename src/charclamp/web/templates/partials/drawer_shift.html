@@ -12,10 +12,15 @@
       </select>
     </label>
     <label>开始时间
-      <input name="started_at" type="datetime-local" />
+      <input id="shift-started-input" name="started_at" type="datetime-local" />
     </label>
-    <label>峰值温度 ℃（可空）
-      <input name="peak_temp_c" type="number" step="0.1" />
+    <div class="drawer-clock">
+      <span class="drawer-clock-label">窑场钟面 · 北京时间</span>
+      <strong id="drawer-clock">--:--:--</strong>
+      <button type="button" class="btn ghost btn-tiny" id="shift-use-now">取当前钟面时刻</button>
+    </div>
+    <label>峰值温度 ℃
+      <input name="peak_temp_c" type="number" step="0.1" min="0.1" required />
     </label>
     <label>炭品等级
       <input name="charcoal_grade" value="B" />
@@ -23,10 +28,45 @@
     <label>备注
       <textarea name="notes" rows="3"></textarea>
     </label>
-    <p class="hint">出炭要求最近班次峰值 ≥ 400℃；本表只登记班次。</p>
+    <p class="hint">出炭要求最近班次峰值 ≥ 400℃；开始时间按窑场北京时间记录。</p>
     <div class="actions">
       <button type="submit">写入时间轴</button>
       <button type="button" class="btn ghost" onclick="closeDrawer()">取消</button>
     </div>
   </form>
+  <script>
+    (function () {
+      // 抽屉钟面：用固定 +08:00 偏移显示窑场北京时间，避免跟随运行环境 UTC 而错位。
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      function kilnParts(d) {
+        var shifted = new Date(d.getTime() + 8 * 3600 * 1000);
+        return {
+          value: shifted.getUTCFullYear() + '-' + pad(shifted.getUTCMonth() + 1) + '-' +
+                 pad(shifted.getUTCDate()) + 'T' + pad(shifted.getUTCHours()) + ':' + pad(shifted.getUTCMinutes()),
+          text: pad(shifted.getUTCHours()) + ':' + pad(shifted.getUTCMinutes()) + ':' + pad(shifted.getUTCSeconds())
+        };
+      }
+      var clockEl = document.getElementById('drawer-clock');
+      var inputEl = document.getElementById('shift-started-input');
+      var nowBtn = document.getElementById('shift-use-now');
+      function tick() {
+        if (clockEl) { clockEl.textContent = kilnParts(new Date()).text; }
+      }
+      tick();
+      var timer = setInterval(tick, 1000);
+      if (nowBtn) {
+        nowBtn.addEventListener('click', function () {
+          if (inputEl) { inputEl.value = kilnParts(new Date()).value; }
+        });
+      }
+      // 抽屉内容被替换后停止旧定时器并注销本监听，避免重复打开时累积。
+      function onBeforeSwap(evt) {
+        if (evt.detail.target && evt.detail.target.id === 'drawer-root') {
+          clearInterval(timer);
+          document.body.removeEventListener('htmx:beforeSwap', onBeforeSwap);
+        }
+      }
+      document.body.addEventListener('htmx:beforeSwap', onBeforeSwap);
+    })();
+  </script>
 </aside>
