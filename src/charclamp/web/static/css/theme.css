@@ -231,6 +231,29 @@ body {
   margin-bottom: 10px;
 }
 
+.timeline-card-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-edit {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.icon-edit:hover {
+  color: #ffedd5;
+  border-color: rgba(224, 122, 47, 0.45);
+  background: rgba(224, 122, 47, 0.12);
+}
+
 .timeline-card-head time {
   color: var(--muted);
   font-size: 0.85rem;

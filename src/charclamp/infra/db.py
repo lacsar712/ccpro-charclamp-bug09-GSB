@@ -29,6 +29,27 @@ def sync_create_all() -> None:
     Base.metadata.create_all(sync_engine)
 
 
+def purge_pending_stub_shifts() -> int:
+    """清理旧版半提交遗留的空峰值残行（stub 指纹：未测峰值 + pending/?）。
+
+    合法的「刚点火、未测峰值」班次 notes/grade 不同，不会被波及。
+    """
+    from sqlalchemy import delete
+
+    from charclamp.domain.models import BurnShift
+
+    with SyncSessionLocal() as session:
+        result = session.execute(
+            delete(BurnShift).where(
+                BurnShift.peak_temp_c.is_(None),
+                BurnShift.notes == "pending",
+                BurnShift.charcoal_grade == "?",
+            )
+        )
+        session.commit()
+        return result.rowcount or 0
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         yield session

@@ -25,10 +25,13 @@ else:
 PY
 
 python << 'PY'
-from charclamp.infra.db import sync_create_all
+from charclamp.infra.db import purge_pending_stub_shifts, sync_create_all
 from charclamp.infra.seed import seed_demo
 
 sync_create_all()
+removed = purge_pending_stub_shifts()
+if removed:
+    print(f"purged {removed} legacy null-peak stub shift(s)")
 seed_demo()
 print("migrate/seed done")
 PY

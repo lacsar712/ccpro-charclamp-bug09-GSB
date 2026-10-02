@@ -13,9 +13,20 @@
           hx-target="#drawer-root"
           hx-swap="innerHTML"
         >{{ shift.clamp.code }}</button>
-        <time datetime="{{ shift.started_at.isoformat() }}">
-          {{ shift.started_at.strftime('%Y-%m-%d %H:%M') }}
-        </time>
+        <span class="timeline-card-time">
+          <time datetime="{{ shift.started_at|dt_iso }}">
+            {{ shift.started_at|dt_display }}
+          </time>
+          <button
+            type="button"
+            class="icon-edit"
+            hx-get="/drawer/shift-edit/{{ shift.id }}"
+            hx-target="#drawer-root"
+            hx-swap="innerHTML"
+            aria-label="改写班次"
+            title="改写班次"
+          >✎</button>
+        </span>
       </header>
       <div class="timeline-card-body">
         <div class="metric">

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -8,6 +10,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def app_timezone() -> ZoneInfo:
+    """窑场本地时区：表单钟面与卡片展示都按此时区解释墙钟时间。"""
+    return ZoneInfo(os.environ.get("APP_TIMEZONE", "Asia/Shanghai"))
 
 
 class Base(DeclarativeBase):
